@@ -73,3 +73,5 @@ The local demo user selector switches roles without a password. For API examples
 - PDF creation currently occurs in the issuance API process. The deployment plan recommends moving bulk PDF work to a dedicated worker queue before a 30,000-document peak.
 - Docker Compose is a single-host demo, not a production high-availability deployment. Its default credentials, volumes, and simulated-provider probabilities are for local use only.
 - No benchmark establishes the stated 100,000-user or peak-throughput targets; the sizing in [DEPLOYMENT.md](DEPLOYMENT.md) is a starting estimate, not a capacity guarantee.
+# Certiflow
+Event-driven skilling certificate issuance platform with batch uploads, validation, multi-level approvals, certificate generation, delivery simulation, and public verification.
