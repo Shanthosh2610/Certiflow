@@ -1,0 +1,28 @@
+{
+  "name": "certiflow",
+  "version": "1.0.0",
+  "description": "CertiFlow - Skilling Certificate Issuance Platform",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:push": "npm --prefix backend run prisma:push",
+    "prisma:seed": "npm --prefix backend run prisma:seed",
+    "db:reset": "npm --prefix backend run db:reset"
+  },
+  "keywords": [
+    "certiflow",
+    "skilling",
+    "certificates",
+    "bullmq",
+    "prisma",
+    "express"
+  ],
+  "author": "CertiFlow Team",
+  "license": "MIT"
+}

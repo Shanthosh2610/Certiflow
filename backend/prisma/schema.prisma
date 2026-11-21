@@ -1,0 +1,244 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  TRAINING_CENTRE
+  DISTRICT_OFFICER
+  QUALITY_TEAM
+  STATE_OFFICE
+}
+
+enum BatchStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_DISTRICT_REVIEW
+  UNDER_QUALITY_REVIEW
+  UNDER_STATE_REVIEW
+  APPROVED
+  REJECTED
+  RETURNED
+  COMPLETED
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum ApprovalStage {
+  DISTRICT
+  QUALITY
+  STATE
+}
+
+enum CandidateStatus {
+  PENDING
+  CERTIFIED
+  FAILED
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENDING
+  RETRYING
+  DELIVERED
+  FAILED
+}
+
+model District {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique // e.g., "BPL", "IND", "GWL"
+  state     String   @default("Madhya Pradesh")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  trainingCentres TrainingCentre[]
+  batches         Batch[]
+
+  @@index([name])
+}
+
+model TrainingCentre {
+  id            String   @id @default(uuid())
+  name          String
+  code          String   @unique // e.g., "TC-BPL-001"
+  districtId    String
+  district      District @relation(fields: [districtId], references: [id])
+  address       String
+  contactPerson String
+  contactPhone  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users   User[]
+  batches Batch[]
+
+  @@index([districtId])
+}
+
+model User {
+  id               String          @id @default(uuid())
+  email            String          @unique
+  passwordHash     String
+  name             String
+  role             Role
+  phone            String?
+  districtId       String?
+  district         District?       @relation(fields: [districtId], references: [id])
+  trainingCentreId String?
+  trainingCentre   TrainingCentre? @relation(fields: [trainingCentreId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  createdBatches Batch[]         @relation("CreatedBatches")
+  approvals      BatchApproval[]
+  revokedCerts   Certificate[]   @relation("RevokedCertificates")
+  auditLogs      AuditLog[]
+
+  @@index([role])
+  @@index([districtId])
+}
+
+model Batch {
+  id                    String         @id @default(uuid())
+  batchNumber           String         @unique // e.g., "BATCH-2026-001"
+  courseName            String
+  trainingCentreId      String
+  trainingCentre        TrainingCentre @relation(fields: [trainingCentreId], references: [id])
+  districtId            String
+  district              District       @relation(fields: [districtId], references: [id])
+  createdById           String
+  createdBy             User           @relation("CreatedBatches", fields: [createdById], references: [id])
+  candidateCount        Int            @default(0)
+  isLargeBatch          Boolean        @default(false) // Set to true if candidateCount >= 50
+  status                BatchStatus    @default(DRAFT)
+  districtApprovalCount Int            @default(0) // Count of district approvals (2 required)
+  reviewRound           Int            @default(1)
+  version               Int            @default(1) // Optimistic concurrency control lock
+  returnReason          String?
+  rejectReason          String?
+  submittedAt           DateTime?
+  approvedAt            DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  candidates   Candidate[]
+  approvals    BatchApproval[]
+  certificates Certificate[]
+
+  @@index([status])
+  @@index([districtId])
+  @@index([trainingCentreId])
+  @@index([createdAt])
+}
+
+model Candidate {
+  id             String          @id @default(uuid())
+  batchId        String
+  batch          Batch           @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  fullName       String
+  phone          String
+  email          String?
+  nationalId     String // Masked/Hashed National ID (e.g. Aadhaar hash)
+  grade          String // "A+", "A", "B", "Pass"
+  completionDate DateTime        @default(now())
+  status         CandidateStatus @default(PENDING)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  certificate Certificate?
+
+  @@unique([batchId, nationalId]) // Prevents duplicate student inside the same batch
+  @@index([batchId])
+  @@index([phone])
+  @@index([nationalId])
+}
+
+model BatchApproval {
+  id          String         @id @default(uuid())
+  batchId     String
+  batch       Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  officerId   String
+  officer     User           @relation(fields: [officerId], references: [id])
+  role        Role
+  stage       ApprovalStage
+  action      ApprovalAction
+  reviewRound Int            @default(1)
+  remarks     String?
+  createdAt   DateTime       @default(now())
+
+  @@unique([batchId, officerId, stage, reviewRound])
+  @@index([batchId])
+  @@index([officerId])
+}
+
+model Certificate {
+  id                String            @id @default(uuid())
+  certificateNumber String            @unique // e.g. "CERT-2026-BPL-00101"
+  candidateId       String            @unique
+  candidate         Candidate         @relation(fields: [candidateId], references: [id])
+  batchId           String
+  batch             Batch             @relation(fields: [batchId], references: [id])
+  pdfUrl            String
+  qrCodeUrl         String
+  verificationHash  String            @unique // Cryptographic SHA-256 tamper-proof hash
+  status            CertificateStatus @default(ACTIVE)
+  revocationReason  String?
+  revokedAt         DateTime?
+  revokedById       String?
+  revokedBy         User?             @relation("RevokedCertificates", fields: [revokedById], references: [id])
+  issuedAt          DateTime          @default(now())
+
+  deliveryLogs WhatsAppDeliveryLog[]
+
+  @@index([certificateNumber])
+  @@index([status])
+  @@index([batchId])
+}
+
+model WhatsAppDeliveryLog {
+  id            String         @id @default(uuid())
+  certificateId String
+  certificate   Certificate    @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  candidateId   String
+  phone         String
+  status        DeliveryStatus @default(QUEUED)
+  attempts      Int            @default(0)
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([certificateId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String // "BATCH", "CERTIFICATE", "USER", "APPROVAL"
+  entityId   String
+  action     String // "BATCH_CREATED", "DISTRICT_APPROVED", "STATE_APPROVED", "CERT_REVOKED"
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  details    Json?
+  ipAddress  String?
+  timestamp  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([userId])
+}
